@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,13 +53,14 @@ type worldStatus struct {
 }
 
 var (
-	metricSimSpeed    = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_sim_speed"})
-	metricPlayerCount = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_player_count"})
-	metricGameReady   = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_game_ready"})
-	metricUptime      = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_uptime"})
-	metricGridCount   = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_grid_count"})
-	metricBannedCount = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_banned_player_count"})
-	metricWorldSize   = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "spaceengineers_world_size"}, []string{"world"})
+	metricSimSpeed      = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_sim_speed"})
+	metricPlayerCount   = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_player_count"})
+	metricGameReady     = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_game_ready"})
+	metricUptime        = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_uptime"})
+	metricGridCount     = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_grid_count"})
+	metricBannedCount   = prometheus.NewGauge(prometheus.GaugeOpts{Name: "spaceengineers_banned_player_count"})
+	metricWorldSize     = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "spaceengineers_world_size"}, []string{"world"})
+	metricPlayersOnline = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "spaceengineers_players"}, []string{"name", "steamID"})
 )
 
 func doServerStatus() error {
@@ -116,11 +119,54 @@ func doGetWorlds() error {
 	return nil
 }
 
+var playersOnline = map[int64]time.Time{}
+
+func doGetPlayersOnline() error {
+	var players []*playerStatus
+	err := makeRequest("/api/v1/players", &players)
+	if err != nil {
+		return err
+	}
+
+	// generate now just once to save time
+	now := time.Now()
+
+	// reset metrics the easiet way to reset ones that aren't on anymore
+	metricPlayersOnline.Reset()
+
+	// build list of players we have to filter ones to remove from the map
+	existingIds := map[int64]bool{}
+	for k := range playersOnline {
+		existingIds[k] = true
+	}
+
+	// loop for stats
+	for _, p := range players {
+		joined, exists := playersOnline[p.ClientID]
+		if !exists {
+			// new user, add to map
+			playersOnline[p.ClientID] = now
+		} else {
+			delete(existingIds, p.ClientID)
+		}
+
+		metricPlayersOnline.WithLabelValues(p.Name, strconv.FormatInt(p.ClientID, 10)).Set(math.Floor(now.Sub(joined).Seconds()))
+	}
+
+	// any keys remaining in existingIds need to be removed from playersOnline
+	for k := range existingIds {
+		delete(playersOnline, k)
+	}
+
+	return nil
+}
+
 var metrics []func() error = []func() error{
 	doServerStatus,
 	doGetGridCount,
 	doGetBannedCount,
 	doGetWorlds,
+	doGetPlayersOnline,
 }
 
 func metricsLoop() {
@@ -169,6 +215,7 @@ func main() {
 	prometheus.MustRegister(metricGridCount)
 	prometheus.MustRegister(metricBannedCount)
 	prometheus.MustRegister(metricWorldSize)
+	prometheus.MustRegister(metricPlayersOnline)
 
 	go metricsLoop()
 
