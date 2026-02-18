@@ -160,16 +160,6 @@ func main() {
 
 	go metricsLoop()
 
-	var players []*playerStatus
-	err := makeRequest("/api/v1/players", &players)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("%#v\n", players)
-	for _, p := range players {
-		fmt.Printf("  %#v\n", p)
-	}
-
 	http.Handle("/metrics", promhttp.Handler())
 	http.ListenAndServe(":9090", nil)
 }
