@@ -67,6 +67,10 @@ func doServerStatus() error {
 	var status *serverStatus
 	err := makeRequest("/api/v1/server/status", &status)
 	if err != nil {
+		metricSimSpeed.Set(0)
+		metricPlayerCount.Set(0)
+		metricGameReady.Set(0)
+		metricUptime.Set(0)
 		return err
 	}
 
@@ -81,6 +85,7 @@ func doGetGridCount() error {
 	var gridIds []int64
 	err := makeRequest("/api/v1/grids", &gridIds)
 	if err != nil {
+		metricGridCount.Set(0)
 		return err
 	}
 
@@ -92,6 +97,7 @@ func doGetBannedCount() error {
 	var playerIds []int64
 	err := makeRequest("/api/v1/players/banned", &playerIds)
 	if err != nil {
+		metricBannedCount.Set(0)
 		return err
 	}
 
@@ -103,6 +109,7 @@ func doGetWorlds() error {
 	var worldIds []string
 	err := makeRequest("/api/v1/worlds", &worldIds)
 	if err != nil {
+		metricWorldSize.Reset()
 		return err
 	}
 
@@ -122,6 +129,9 @@ func doGetWorlds() error {
 var playersOnline = map[int64]time.Time{}
 
 func doGetPlayersOnline() error {
+	// reset metrics the easiet way to reset ones that aren't on anymore
+	metricPlayersOnline.Reset()
+
 	var players []*playerStatus
 	err := makeRequest("/api/v1/players", &players)
 	if err != nil {
@@ -130,9 +140,6 @@ func doGetPlayersOnline() error {
 
 	// generate now just once to save time
 	now := time.Now()
-
-	// reset metrics the easiet way to reset ones that aren't on anymore
-	metricPlayersOnline.Reset()
 
 	// build list of players we have to filter ones to remove from the map
 	existingIds := map[int64]bool{}
