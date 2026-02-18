@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	TORCH_HOST = os.Getenv("TORCH_HOST")
-	TORCH_PORT = os.Getenv("TORCH_PORT")
-	TORCH_PASS = os.Getenv("TORCH_PASS")
+	TORCH_HOST    = os.Getenv("TORCH_HOST")
+	TORCH_PORT    = os.Getenv("TORCH_PORT")
+	TORCH_PASS    = os.Getenv("TORCH_PASS")
+	INTERVAL      = os.Getenv("INTERVAL")
+	timerInterval = time.Minute
 )
 
 type StatusEnum int
@@ -122,6 +124,7 @@ var metrics []func() error = []func() error{
 }
 
 func metricsLoop() {
+	log.Printf("poll metrics every %s", timerInterval.String())
 	// loop all metrics on startup
 	log.Println("processing metrics")
 	for _, f := range metrics {
@@ -130,7 +133,7 @@ func metricsLoop() {
 		}
 	}
 
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(timerInterval)
 	defer ticker.Stop()
 
 	// loop on the ticker collecting metrics
@@ -148,6 +151,15 @@ func metricsLoop() {
 func main() {
 	if TORCH_HOST == "" || TORCH_PORT == "" || TORCH_PASS == "" {
 		log.Fatal("Set TORCH_HOST, TORCH_PORT, and TORCH_PASS")
+	}
+
+	if INTERVAL != "" {
+		var err error
+		timerInterval, err = time.ParseDuration(INTERVAL)
+		if err != nil {
+			log.Fatalf("Failed to parse INTERVAL: %v", err)
+			return
+		}
 	}
 
 	prometheus.MustRegister(metricSimSpeed)
