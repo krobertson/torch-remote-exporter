@@ -146,6 +146,7 @@ func doGetPlayersOnline() error {
 		if !exists {
 			// new user, add to map
 			playersOnline[p.ClientID] = now
+			joined = now
 		} else {
 			delete(existingIds, p.ClientID)
 		}
